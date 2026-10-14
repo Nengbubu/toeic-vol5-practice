@@ -38,7 +38,9 @@
  }
  $('resume-go').onclick=resumeSession;
  $('resume-drop').onclick=()=>{if(confirm('放弃这次未交卷的进度？')){write(SESSION_KEY,null);renderResume()}};
- const originalRender=render;render=function(){originalRender();saveSoon()};
+ // 答题卡在右栏内部滚动时，让当前题保持可见
+ function keepCurrentVisible(){const map=$('question-map'),cur=map.querySelector('.current');if(!cur||map.scrollHeight<=map.clientHeight)return;if(cur.offsetTop<map.scrollTop)map.scrollTop=cur.offsetTop-4;else if(cur.offsetTop+cur.offsetHeight>map.scrollTop+map.clientHeight)map.scrollTop=cur.offsetTop+cur.offsetHeight-map.clientHeight+4}
+ const originalRender=render;render=function(){originalRender();keepCurrentVisible();saveSoon()};
  const originalScore=showScore;showScore=function(key){originalScore(key);clearTimeout(saveTimer);write(SESSION_KEY,null)};
  setInterval(()=>{if(running)saveNow()},5000);
  window.addEventListener('pagehide',saveNow);
