@@ -44,14 +44,24 @@
  function setView(next){view=next;stopTimer();stopSegment();$('welcome').hidden=true;$('practice').hidden=true;$('study-library').hidden=false;$('wrong-library').hidden=next!=='wrong';$('word-library').hidden=next!=='words';$('library-title').textContent=next==='wrong'?'把错过的，学会。':'把生词，变成自己的词。';$('library-eyebrow').textContent=next==='wrong'?'WRONG ANSWERS':'MY VOCABULARY';refreshCounts();renderLibrary();window.scrollTo(0,0)}
  function resume(){ $('study-library').hidden=true;$('welcome').hidden=Boolean(test);$('practice').hidden=!test;window.scrollTo(0,0)}
  function renderLibrary(){if(view==='wrong')renderWrong();else renderWords()}
- function wrongRows(){const n=+$('wrong-test-filter').value,filter=$('wrong-status-filter').value,search=$('wrong-search').value.trim().toLowerCase();return state.wrong.filter(r=>(!n||r.test===n)&&(filter==='all'||(filter==='mastered'?r.mastered:!r.mastered))&&(!search||(sourceLabel(r.test,r.question)+' '+r.note).toLowerCase().includes(search))).sort((a,b)=>a.test-b.test||a.question-b.question)}
+ function wrongRows(withPart=true){const n=+$('wrong-test-filter').value,part=+$('wrong-part-filter').value,filter=$('wrong-status-filter').value,search=$('wrong-search').value.trim().toLowerCase(),sort=$('wrong-sort').value;const byQuestion=(a,b)=>a.test-b.test||a.question-b.question;return state.wrong.filter(r=>(!n||r.test===n)&&(!withPart||!part||partOf(r.question)===part)&&(filter==='all'||(filter==='mastered'?r.mastered:!r.mastered))&&(!search||(sourceLabel(r.test,r.question)+' '+r.note).toLowerCase().includes(search))).sort(sort==='count'?(a,b)=>b.wrongCount+b.blankCount-a.wrongCount-a.blankCount||byQuestion(a,b):sort==='recent'?(a,b)=>(b.updatedAt>a.updatedAt?1:b.updatedAt<a.updatedAt?-1:0)||byQuestion(a,b):byQuestion)}
+ function renderPartCounts(){const rows=wrongRows(false);$('wrong-parts').replaceChildren(...parts.map((_,i)=>{const c=rows.filter(r=>partOf(r.question)===i+1).length;const b=button('Part '+(i+1)+'：'+c+' 题',()=>{$('wrong-part-filter').value=$('wrong-part-filter').value===String(i+1)?'0':String(i+1);renderWrong()});b.disabled=!c;b.setAttribute('aria-pressed',String($('wrong-part-filter').value===String(i+1)));return b}))}
+ function wrongCard(r,withTest){
+  const card=node('article',null,'note-card'),title=node('div',null,'note-card-head'),times=r.wrongCount+r.blankCount;
+  title.append(node('h3',(withTest?sourceLabel(r.test)+' · ':'')+'第 '+r.question+' 题 · Part '+partOf(r.question)),node('span',r.mastered?'已掌握':'待复习','note-badge'));
+  const meta=node('p',null,'note-meta');meta.append(node('span',times?'错 '+times+' 次':'手动加入','wrong-count'+(times>=3?' many':'')),' '+(r.lastAnswer?'上次选 '+r.lastAnswer:'上次未答')+' · 正确 '+r.correct+(r.blankCount?' · 其中未答 '+r.blankCount+' 次':'')+' · 最近 '+new Date(r.updatedAt).toLocaleDateString('zh-CN'));
+  card.append(title,meta);return card;
+ }
  function renderWrong(){
   const rows=wrongRows(),list=$('wrong-list');list.replaceChildren();$('wrong-summary').textContent=state.wrong.length?'共 '+state.wrong.length+' 题 · 待复习 '+state.wrong.filter(r=>!r.mastered).length+' 题 · 当前显示 '+rows.length+' 题':'还没有错题。交卷后会自动记录答错的题。';
+  renderPartCounts();
   if(!rows.length){list.append(node('p','这里暂时没有符合筛选条件的错题。','empty-note'));return}
-  for(const n of [...new Set(rows.map(r=>r.test))]){
-   const group=node('section',null,'notebook-group'),head=node('div',null,'notebook-group-head'),selected=rows.filter(r=>r.test===n&&!r.mastered);head.append(node('h2','Test '+String(n).padStart(2,'0')));if(selected.length)head.append(button('重做这套错题（'+selected.length+'）',()=>practiceSaved(n,selected.map(r=>r.question))));group.append(head);
-   for(const r of rows.filter(r=>r.test===n)){
-    const card=node('article',null,'note-card'),title=node('div',null,'note-card-head');title.append(node('h3','第 '+r.question+' 题 · Part '+partOf(r.question)),node('span',r.mastered?'已掌握':'待复习','note-badge'));card.append(title,node('p',(r.lastAnswer?'上次选 '+r.lastAnswer:'上次未答')+' · 正确 '+r.correct+' · 答错 '+r.wrongCount+' 次'+(r.blankCount?' · 未答 '+r.blankCount+' 次':''),'note-meta'));
+  const flat=$('wrong-sort').value!=='question',groups=flat?[0]:[...new Set(rows.map(r=>r.test))];
+  for(const n of groups){
+   const group=node('section',null,'notebook-group');
+   if(!flat){const head=node('div',null,'notebook-group-head'),selected=rows.filter(r=>r.test===n&&!r.mastered);head.append(node('h2','Test '+String(n).padStart(2,'0')));if(selected.length)head.append(button('重做这套错题（'+selected.length+'）',()=>practiceSaved(n,selected.map(r=>r.question))));group.append(head)}
+   for(const r of flat?rows:rows.filter(r=>r.test===n)){
+    const card=wrongCard(r,flat);
     const notes=node('textarea');notes.rows=2;notes.maxLength=3000;notes.value=r.note;notes.placeholder='记下原因、语法或容易混淆的地方';notes.setAttribute('aria-label',sourceLabel(r.test,r.question)+'错题笔记');card.append(notes);
     const actions=node('div',null,'note-actions');actions.append(button('重做本题',()=>practiceSaved(r.test,[r.question])),button('保存笔记',()=>{r.note=notes.value.trim();r.updatedAt=stamp();persist();message('笔记已保存。')}),button(r.mastered?'恢复待复习':'标记已掌握',()=>{r.mastered=!r.mastered;r.updatedAt=stamp();persist();renderWrong()}),button('记单词',()=>openWordForm(r.test,r.question)));card.append(actions);group.append(card)
    }list.append(group)
@@ -71,12 +81,26 @@
  function backup(){return {schema:1,edition:EDITION,exportedAt:stamp(),wrong:state.wrong,words:state.words,history:state.history,includeBlanks:state.includeBlanks}}
  function mergeBackup(input){const incoming=normalizeBackup(input);let added=0;for(const row of incoming.history)if(!state.history.some(h=>h.id===row.id)){state.history.push(row);added++}state.history.sort((a,b)=>a.at<b.at?-1:1);for(const field of ['wrong','words'])for(const row of incoming[field]){const index=state[field].findIndex(old=>old.id===row.id);if(index<0){state[field].push(row);added++}else if(row.updatedAt>state[field][index].updatedAt){const old=state[field][index];state[field][index]=field==='wrong'?{...row,wrongCount:Math.max(old.wrongCount,row.wrongCount),blankCount:Math.max(old.blankCount,row.blankCount)}:row}}persist();renderLibrary();return added}
  const originalReset=resetSession;resetSession=function(){attempt=makeId();return originalReset()};
- const originalScore=showScore;showScore=function(key){originalScore(key);recordRound(key)};
+ const originalScore=showScore;showScore=function(key){originalScore(key);recordRound(key);render()};
+ function addCurrentWrong(){
+  if(!test)return;const id=wrongId(test,question),now=stamp();let row=state.wrong.find(r=>r.id===id);
+  if(row){row.mastered=false;row.updatedAt=now}
+  else{row={id,test,question,correct:EDITION_KEYS[test].answers[question-1],lastAnswer:answers[question]||null,wrongCount:0,blankCount:0,mastered:false,note:'',createdAt:now,updatedAt:now,lastAttempt:''};state.wrong.push(row)}
+  persist();render();
+ }
+ const originalRender=render;render=function(){
+  originalRender();if(!test)return;
+  const rows=new Map(state.wrong.filter(r=>r.test===test).map(r=>[r.question,r])),row=rows.get(question),times=row?row.wrongCount+row.blankCount:0;
+  $('wrong-history').hidden=!row;
+  if(row)$('wrong-history').textContent=(times?'这题以前错过 '+times+' 次':'这题在错题本里')+(row.mastered?' · 已掌握':' · 待复习')+(row.note?' · 笔记：'+row.note:'');
+  $('add-wrong').disabled=Boolean(row&&!row.mastered);$('add-wrong').textContent=row&&!row.mastered?'已在错题本':'＋错题本';
+  for(const b of $('question-map').children){const r=rows.get(+b.textContent),n=r?r.wrongCount+r.blankCount:0;if(n)b.dataset.wrong=n>9?'9+':String(n);else delete b.dataset.wrong;b.classList.toggle('wrong-done',Boolean(r&&r.mastered))}
+ };
  const originalOpen=openTest;openTest=async function(n){$('study-library').hidden=true;await originalOpen(n)};
  const originalRetry=$('retry').onclick;$('retry').onclick=()=>{attempt=makeId();return originalRetry()};
- $('nav-practice').onclick=resume;$('nav-wrong').onclick=()=>setView('wrong');$('nav-words').onclick=()=>setView('words');$('add-current-word').onclick=()=>openWordForm(test,question);
+ $('nav-practice').onclick=resume;$('nav-wrong').onclick=()=>setView('wrong');$('nav-words').onclick=()=>setView('words');$('add-current-word').onclick=()=>openWordForm(test,question);$('add-wrong').onclick=addCurrentWrong;
  $('remember-blanks').onchange=()=>{state.includeBlanks=$('remember-blanks').checked;persist()};
- for(const id of ['wrong-test-filter','wrong-status-filter'])$(id).onchange=renderWrong;$('wrong-search').oninput=renderWrong;for(const id of ['word-status-filter','word-hide-meanings'])$(id).onchange=renderWords;$('word-search').oninput=renderWords;
+ for(const id of ['wrong-test-filter','wrong-part-filter','wrong-status-filter','wrong-sort'])$(id).onchange=renderWrong;$('wrong-search').oninput=renderWrong;for(const id of ['word-status-filter','word-hide-meanings'])$(id).onchange=renderWords;$('word-search').oninput=renderWords;
  $('word-cancel').onclick=clearWordForm;
  $('word-form').onsubmit=e=>{e.preventDefault();try{const input={term:$('word-term').value,meaning:$('word-meaning').value,example:$('word-example').value,note:$('word-note').value,sourceTest:+$('word-test').value,sourceQuestion:+$('word-question').value};const same=state.words.find(w=>w.id===wordId(input.term));if(same&&!editingWord){fillWordForm(same);message('这个单词已存在，已打开原条目供你编辑。');return}if(input.sourceQuestion&&!input.sourceTest)throw Error('请为来源题号选择套题');saveWord(input);clearWordForm();renderWords();message('单词已保存。')}catch(err){message(err.message)}};
  $('export-notebooks').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(backup(),null,2)],{type:'application/json'})),a=node('a');a.href=url;a.download='TOEIC-learning-backup-'+stamp().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);try{localStorage.setItem(EXPORT_KEY,stamp())}catch{}showLastExport();message('备份已导出。换电脑后在同一网站导入即可。')};
