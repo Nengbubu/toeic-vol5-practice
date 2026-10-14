@@ -13,3 +13,8 @@
 .history{margin-top:40px}.history-list{overflow-x:auto}.history table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;background:white}.history th,.history td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}.history th{font-weight:600;color:var(--muted);font-size:12px}
 .toggle{display:flex;align-items:center;gap:6px;margin-top:-4px}.shortcut-hint{font-size:11px;color:var(--muted);margin:0 0 10px}
 @media(max-width:720px){.materials-card,.resume-card{display:block;padding:18px}.materials-actions,.resume-actions{justify-content:flex-start;margin-top:14px}.shortcut-hint{display:none}}
+
+/* 练习页：铺满宽度，题册占剩余空间，高度跟随窗口 */
+main:has(#practice:not([hidden])){max-width:none;padding:28px 2vw 50px}
+@media(min-width:901px){.workspace{grid-template-columns:minmax(0,1fr) 400px;gap:18px}.parts{flex-wrap:nowrap}.parts button{flex:1;padding:7px 0;white-space:nowrap}.paper{padding:12px 14px}.paper iframe{height:calc(100vh - 110px);min-height:560px}.paper .small{margin:6px 0 0}}
+@media(min-width:901px) and (max-width:1200px){.workspace{grid-template-columns:minmax(0,1fr) 340px}.choices button{padding:13px}}
