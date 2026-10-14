@@ -37,6 +37,8 @@
   }catch(err){if(test===n){originalShow();$('pdf-page-note').textContent=err.message}}
  };
  $('pdf-section').onchange=showBook;
+ // 本机服务器上与网站并排的资料文件夹：直接用地址打开，不读入内存。
+ window.registerSplitBookUrl=(n,section,url)=>{const key=n+':'+section;splitFiles.set(key,null);splitUrls.set(key,url)};
  window.registerSplitBook=registerSplitBook;
  window.hasSplitBook=(n,section)=>splitFiles.has(n+':'+section);
  window.splitBookCount=()=>splitFiles.size;

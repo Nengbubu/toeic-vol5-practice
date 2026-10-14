@@ -53,8 +53,26 @@
   setStatus('上次使用的资料文件夹是「'+handle.name+'」。点一下重新连接即可，无需再逐个选择文件。');
   $('reconnect-folder').onclick=async()=>{try{if(await handle.requestPermission({mode:'read'})!=='granted')throw Error('浏览器未授予读取权限。');await useHandle(handle)}catch(err){setStatus(err.message,true)}};
  }
+ // 用 启动网站.cmd 在本机打开时，资料文件夹与网站文件夹并排，可直接按 manifest.json 读取。
+ const LOCAL_ROOTS=['../TOEIC-2026-Vol5-10Tests/','../toeic-vol5-materials/'];
+ async function autoLoad(){
+  if(!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))return false;
+  for(const root of LOCAL_ROOTS){
+   let manifest;try{const res=await fetch(root+'manifest.json',{cache:'no-cache'});if(!res.ok)continue;manifest=await res.json()}catch{continue}
+   if(!Array.isArray(manifest.tests))continue;
+   for(const t of manifest.tests){
+    for(const section of ['LC','RC'])if(t.pdfs?.[section]?.file)registerSplitBookUrl(t.test,section,root+t.pdfs[section].file);
+    for(const a of t.audio||[]){const id=clipIdentity(a.file.split('/').pop());if(id)audioFiles.set(id.n+':'+id.first,{url:root+a.file,...id})}
+   }
+   setStatus('已自动载入本机资料：题册 '+splitBookCount()+' / 20 份 · 音频 '+audioFiles.size+' / 540 段。打开任意一套即可使用。');
+   $('audio-import-status').textContent='已读取 '+audioFiles.size+' 个分段文件。';
+   status('资料已载入，可以开始练习。');listTests();if(test){showBook();renderSegments()}
+   return true;
+  }
+  return false;
+ }
  $('connect-folder').onclick=connect;
  $('materials-input').onchange=e=>{try{ingest(e.target.files)}catch(err){setStatus(err.message,true)}finally{e.target.value=''}};
  $('forget-folder').onclick=async()=>{await dropHandle();showButtons({});setStatus('已忘记文件夹。本页已载入的资料在刷新前仍可使用。')};
- restore();
+ autoLoad().then(ok=>{if(!ok)restore()});
 })();
