@@ -1,7 +1,7 @@
 'use strict';
 (() => {
  const STORAGE_KEY='toeic-vol5-notebooks-v1',EDITION='ETS-VOL5-2026';
- let state={schema:1,edition:EDITION,wrong:[],words:[],includeBlanks:false},view='wrong',attempt=makeId(),editingWord=null;
+ let state={schema:1,edition:EDITION,wrong:[],words:[],history:[],includeBlanks:false},view='wrong',attempt=makeId(),editingWord=null;
  const stamp=()=>new Date().toISOString();
  function makeId(){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}
  const wrongId=(n,q)=>`${n}:${q}`;
@@ -13,9 +13,13 @@
   if(!input||input.schema!==1||input.edition!==EDITION||!Array.isArray(input.wrong)||!Array.isArray(input.words)||input.wrong.length>2000||input.words.length>10000)throw Error('这不是本网站的 Vol.5 学习备份');
   const wrong=input.wrong.map(r=>{const n=num(r.test,1,10),q=num(r.question,1,200),correct=EDITION_KEYS[n].answers[q-1];if(r.correct!==correct)throw Error('备份中的答案与当前版本不符');if(r.lastAnswer!==null&&!/^[ABCD]$/.test(r.lastAnswer))throw Error('备份作答选项无效');if(q>=7&&q<=31&&r.lastAnswer==='D')throw Error('Part 2 选项无效');return {id:wrongId(n,q),test:n,question:q,correct,lastAnswer:r.lastAnswer,wrongCount:num(r.wrongCount,0,1000000),blankCount:num(r.blankCount,0,1000000),mastered:r.mastered===true,note:text(r.note,3000,true),createdAt:date(r.createdAt),updatedAt:date(r.updatedAt),lastAttempt:text(r.lastAttempt,100,true)}});
   const words=input.words.map(w=>{const term=text(w.term,120);if(!term)throw Error('备份中有空白单词');const sourceTest=num(w.sourceTest||0,0,10),sourceQuestion=num(w.sourceQuestion||0,0,200);if(sourceQuestion&&!sourceTest)throw Error('单词来源缺少套题');return {id:wordId(term),term,meaning:text(w.meaning,2000,true),example:text(w.example,3000,true),note:text(w.note,3000,true),sourceTest,sourceQuestion,mastered:w.mastered===true,createdAt:date(w.createdAt),updatedAt:date(w.updatedAt)}});
-  if(new Set(wrong.map(r=>r.id)).size!==wrong.length||new Set(words.map(w=>w.id)).size!==words.length)throw Error('备份内包含重复条目');
-  return {schema:1,edition:EDITION,wrong,words,includeBlanks:input.includeBlanks===true};
+  const historyInput=input.history==null?[]:input.history;if(!Array.isArray(historyInput)||historyInput.length>5000)throw Error('备份中的成绩记录无效');
+  const history=historyInput.map(h=>{if(h.kind!=='RC'&&h.kind!=='FULL')throw Error('备份中的成绩记录无效');const total=h.kind==='RC'?100:200;if(!Array.isArray(h.parts)||h.parts.length!==7)throw Error('备份中的分项成绩无效');return {id:text(h.id,100),test:num(h.test,1,10),kind:h.kind,correct:num(h.correct,0,total),total,lc:num(h.lc,0,100),rc:num(h.rc,0,100),parts:h.parts.map(p=>num(p,0,54)),seconds:num(h.seconds,0,7200),at:date(h.at)}});
+  if(new Set(wrong.map(r=>r.id)).size!==wrong.length||new Set(words.map(w=>w.id)).size!==words.length||new Set(history.map(h=>h.id)).size!==history.length)throw Error('备份内包含重复条目');
+  return {schema:1,edition:EDITION,wrong,words,history,includeBlanks:input.includeBlanks===true};
  }
+ const EXPORT_KEY='toeic-vol5-last-export';
+ function showLastExport(){let at=null;try{at=localStorage.getItem(EXPORT_KEY)}catch{}$('last-export').textContent=at?'上次导出：'+new Date(at).toLocaleString('zh-CN',{dateStyle:'medium',timeStyle:'short'}):'还没有导出过备份。'}
  let storageError='';
  try{const raw=localStorage.getItem(STORAGE_KEY);if(raw)state=normalizeBackup(JSON.parse(raw))}catch{storageError='学习记录读取失败；当前内容暂存于本次页面，请及时导出备份。'}
  function persist(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state));storageError=''}catch{storageError='浏览器未能保存记录；请在关闭页面前导出备份。'}$('notebook-storage-status').textContent=storageError;refreshCounts()}
@@ -30,6 +34,8 @@
    if(!row){row={id,test,question:q,correct,lastAnswer:choice,wrongCount:0,blankCount:0,mastered:false,note:'',createdAt:now,updatedAt:now,lastAttempt:''};state.wrong.push(row)}
    row.lastAnswer=choice;row.correct=correct;row.wrongCount+=choice?1:0;row.blankCount+=choice?0:1;row.mastered=false;row.updatedAt=now;row.lastAttempt=attempt;changed=true;
   }
+  const kind=roundQuestions.length===200?'FULL':roundQuestions.length===100&&roundQuestions[0]===101?'RC':null;
+  if(kind&&!state.history.some(h=>h.id===attempt)){const limit=kind==='FULL'?7200:4500,ok=q=>answers[q]===key[q],count=qs=>qs.filter(ok).length;state.history.push({id:attempt,test,kind,correct:count(roundQuestions),total:roundQuestions.length,lc:count(roundQuestions.filter(q=>q<=100)),rc:count(roundQuestions.filter(q=>q>100)),parts:parts.map(([a,b])=>count(roundQuestions.filter(q=>q>=a&&q<=b))),seconds:Math.max(0,Math.min(limit,Math.round(limit-remaining))),at:now});if(state.history.length>5000)state.history.shift();changed=true}
   if(changed)persist();$('saved-wrong-status').textContent='错题已保存至当前浏览器；答错会自动收录'+(state.includeBlanks?'，未答也收录。':'，未答暂不收录。');
  }
  function node(tag,value,cls){const e=document.createElement(tag);if(value!=null)e.textContent=value;if(cls)e.className=cls;return e}
@@ -62,8 +68,8 @@
   $('word-summary').textContent='共 '+state.words.length+' 个词 · 已掌握 '+state.words.filter(w=>w.mastered).length+' 个 · 当前显示 '+rows.length+' 个';const list=$('word-list');list.replaceChildren();if(!rows.length)list.append(node('p','把今天遇到的第一个生词记在上面。','empty-note'));
   for(const w of rows){const card=node('article',null,'note-card'),head=node('div',null,'note-card-head');head.append(node('h3',w.term),node('span',w.mastered?'已掌握':'学习中','note-badge'));card.append(head,node('p',sourceLabel(w.sourceTest,w.sourceQuestion),'note-meta'));const meaning=node('p',w.meaning||'尚未填写释义','word-meaning');meaning.hidden=hidden;card.append(meaning);if(w.example)card.append(node('p',w.example,'word-example'));if(w.note)card.append(node('p',w.note,'note-meta'));const actions=node('div',null,'note-actions');if(hidden)actions.append(button('显示释义',()=>{meaning.hidden=!meaning.hidden}));actions.append(button('编辑',()=>fillWordForm(w)),button(w.mastered?'继续学习':'标记已掌握',()=>{w.mastered=!w.mastered;w.updatedAt=stamp();persist();renderWords()}));if(w.sourceQuestion)actions.append(button('打开来源题',()=>practiceSaved(w.sourceTest,[w.sourceQuestion])));card.append(actions);list.append(card)}
  }
- function backup(){return {schema:1,edition:EDITION,exportedAt:stamp(),wrong:state.wrong,words:state.words,includeBlanks:state.includeBlanks}}
- function mergeBackup(input){const incoming=normalizeBackup(input);let added=0;for(const field of ['wrong','words'])for(const row of incoming[field]){const index=state[field].findIndex(old=>old.id===row.id);if(index<0){state[field].push(row);added++}else if(row.updatedAt>state[field][index].updatedAt){const old=state[field][index];state[field][index]=field==='wrong'?{...row,wrongCount:Math.max(old.wrongCount,row.wrongCount),blankCount:Math.max(old.blankCount,row.blankCount)}:row}}persist();renderLibrary();return added}
+ function backup(){return {schema:1,edition:EDITION,exportedAt:stamp(),wrong:state.wrong,words:state.words,history:state.history,includeBlanks:state.includeBlanks}}
+ function mergeBackup(input){const incoming=normalizeBackup(input);let added=0;for(const row of incoming.history)if(!state.history.some(h=>h.id===row.id)){state.history.push(row);added++}state.history.sort((a,b)=>a.at<b.at?-1:1);for(const field of ['wrong','words'])for(const row of incoming[field]){const index=state[field].findIndex(old=>old.id===row.id);if(index<0){state[field].push(row);added++}else if(row.updatedAt>state[field][index].updatedAt){const old=state[field][index];state[field][index]=field==='wrong'?{...row,wrongCount:Math.max(old.wrongCount,row.wrongCount),blankCount:Math.max(old.blankCount,row.blankCount)}:row}}persist();renderLibrary();return added}
  const originalReset=resetSession;resetSession=function(){attempt=makeId();return originalReset()};
  const originalScore=showScore;showScore=function(key){originalScore(key);recordRound(key)};
  const originalOpen=openTest;openTest=async function(n){$('study-library').hidden=true;await originalOpen(n)};
@@ -73,9 +79,9 @@
  for(const id of ['wrong-test-filter','wrong-status-filter'])$(id).onchange=renderWrong;$('wrong-search').oninput=renderWrong;for(const id of ['word-status-filter','word-hide-meanings'])$(id).onchange=renderWords;$('word-search').oninput=renderWords;
  $('word-cancel').onclick=clearWordForm;
  $('word-form').onsubmit=e=>{e.preventDefault();try{const input={term:$('word-term').value,meaning:$('word-meaning').value,example:$('word-example').value,note:$('word-note').value,sourceTest:+$('word-test').value,sourceQuestion:+$('word-question').value};const same=state.words.find(w=>w.id===wordId(input.term));if(same&&!editingWord){fillWordForm(same);message('这个单词已存在，已打开原条目供你编辑。');return}if(input.sourceQuestion&&!input.sourceTest)throw Error('请为来源题号选择套题');saveWord(input);clearWordForm();renderWords();message('单词已保存。')}catch(err){message(err.message)}};
- $('export-notebooks').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(backup(),null,2)],{type:'application/json'})),a=node('a');a.href=url;a.download='TOEIC-learning-backup-'+stamp().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);message('备份已导出。换电脑后在同一网站导入即可。')};
+ $('export-notebooks').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(backup(),null,2)],{type:'application/json'})),a=node('a');a.href=url;a.download='TOEIC-learning-backup-'+stamp().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);try{localStorage.setItem(EXPORT_KEY,stamp())}catch{}showLastExport();message('备份已导出。换电脑后在同一网站导入即可。')};
  $('import-notebooks').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>8*1024*1024)throw Error('备份文件超过 8 MB');const added=mergeBackup(JSON.parse(await file.text()));message('备份已合并，新增 '+added+' 条；较新的记录会保留。')}catch(err){message('导入失败：'+err.message)}finally{e.target.value=''}};
  window.addEventListener('storage',event=>{if(event.key===STORAGE_KEY&&event.newValue)try{state=normalizeBackup(JSON.parse(event.newValue));refreshCounts();if(!$('study-library').hidden)renderLibrary()}catch{}});
- $('notebook-storage-status').textContent=storageError;refreshCounts();
- window.StudyStore={snapshot:()=>JSON.parse(JSON.stringify(backup())),normalizeBackup,mergeBackup,saveWord,recordRound,practiceSaved,storageKey:STORAGE_KEY};
+ $('notebook-storage-status').textContent=storageError;refreshCounts();showLastExport();
+ window.StudyStore={snapshot:()=>JSON.parse(JSON.stringify(backup())),history:()=>state.history.slice(),normalizeBackup,mergeBackup,saveWord,recordRound,practiceSaved,storageKey:STORAGE_KEY};
 })();

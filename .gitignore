@@ -1,0 +1,9 @@
+# 题册、音频等受版权保护的资料不进仓库
+*.pdf
+*.mp3
+*.zip
+*.m3u8
+TOEIC-2026-Vol5-10Tests/
+# 本地学习备份（含个人记录）
+TOEIC-learning-backup-*.json
+.claude/
