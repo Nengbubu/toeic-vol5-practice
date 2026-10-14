@@ -84,6 +84,7 @@
   if(choice){const b=[...$('choices').children].find(x=>x.textContent===choice&&!x.disabled);if(b){b.click();e.preventDefault()}return}
   if(e.key==='ArrowRight'||e.key==='ArrowLeft'){move(e.key==='ArrowRight'?1:-1);e.preventDefault();return}
   if(key==='M'){$('mark').click();return}
+  if(key==='W'){$('add-current-word').click();e.preventDefault();return}
   if(key==='P'||(e.key===' '&&target.tagName!=='BUTTON')){const a=$('segment-audio');if(!a.hidden&&a.src){a.paused?a.play():a.pause()}else if(!$('play-question').disabled)playSegment(question);e.preventDefault()}
  });
 
